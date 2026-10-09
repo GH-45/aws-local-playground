@@ -1,0 +1,28 @@
+services:
+  floci:
+    image: ${FLOCI_IMAGE}
+    container_name: ${FLOCI_CONTAINER_NAME}
+
+    restart: ${FLOCI_RESTART_POLICY}
+
+    ports:
+      - "4566:${FLOCI_CONTAINER_PORT}"
+      # - "6379-6399:${FLOCI_ELASTICACHE_PORTS}"
+      # - "7001-7099:${FLOCI_RDS_PORTS}"
+
+    environment:
+      # General
+      FLOCI_HOSTNAME: ${FLOCI_HOSTNAME}
+  
+      # Interfaz de usuario
+      FLOCI_SERVICES_UI_IMAGE: ${FLOCI_SERVICES_UI_IMAGE}
+      FLOCI_SERVICES_UI_ENABLED: ${FLOCI_SERVICES_UI_ENABLED}
+      FLOCI_SERVICES_UI_PORT: ${FLOCI_SERVICES_UI_PORT}
+
+      # Almacenamiento
+      FLOCI_STORAGE_MODE: ${FLOCI_STORAGE_MODE}
+      FLOCI_STORAGE_PERSISTENT_PATH: ${FLOCI_STORAGE_PERSISTENT_PATH}
+
+    volumes:
+      - "${FLOCI_DATA_PATH}:${FLOCI_STORAGE_PERSISTENT_PATH}"
+      - /var/run/docker.sock:/var/run/docker.sock
