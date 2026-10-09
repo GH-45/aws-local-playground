@@ -1,0 +1,8 @@
+# Environments
+.env
+
+# Visual Studio Code
+.vscode/
+
+# Floci data
+floci-data/
