@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  Template for deploying an Amazon SQS queue (+ Dead Letter Queue) integrated with an AWS Lambda
+  function through an event source mapping.
+
+Parameters:
+  DeploymentEnvironment:
+    Type: String
+    Default: local
+    AllowedValues:
+      - local
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment name.
+
+  LambdaBatchSize:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 10
+    Description: Maximum number of SQS messages processed per Lambda invocation.
+
+  QueueVisibilityTimeout:
+    Type: Number
+    Default: 60
+    Description: Visibility timeout, in seconds, for the primary SQS queue.
+
+  DeadLetterQueueMaxReceiveCount:
+    Type: Number
+    Default: 5
+    Description: Number of processing attempts before sending a message to the DLQ.
+
+Resources:
+  # -------------------------
+  # Dead Letter Queue
+  # -------------------------
+
+  MessageProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-message-processing-dlq-${DeploymentEnvironment}"
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # -------------------------
+  # Main SQS Queue
+  # -------------------------
+
+  MessageProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-message-processing-queue-${DeploymentEnvironment}"
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
+      MessageRetentionPeriod: 345600 # 4 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt MessageProcessingDeadLetterQueue.Arn
+        maxReceiveCount: !Ref DeadLetterQueueMaxReceiveCount
+
+  # -------------------------
+  # Lambda Execution Role
+  # -------------------------
+
+  MessageProcessorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+      Policies:
+        - PolicyName: MessageProcessingQueueConsumerPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt MessageProcessingQueue.Arn
+
+  # -------------------------
+  # Message Processor Function
+  # -------------------------
+
+  MessageProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-message-processor-${DeploymentEnvironment}"
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt MessageProcessorFunctionRole.Arn
+      Timeout: 30
+      MemorySize: 128
+
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref DeploymentEnvironment
+          QUEUE_URL: !Ref MessageProcessingQueue
+
+      LoggingConfig:
+        LogGroup: !Ref MessageProcessorFunctionLogGroup
+        LogFormat: JSON
+
+      Code:
+        ZipFile: |
+          import json
+
+          def lambda_handler(event, context):
+              for record in event.get("Records", []):
+                  message_id = record.get("messageId")
+                  body = record.get("body")
+
+                  print(json.dumps({
+                      "messageId": message_id,
+                      "status": "PROCESSED",
+                      "body": body
+                  }))
+
+              return {"statusCode": 200}
+
+  # -------------------------
+  # Event Source Mapping
+  # -------------------------
+
+  MessageProcessingQueueEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt MessageProcessingQueue.Arn
+      FunctionName: !Ref MessageProcessorFunction
+      BatchSize: !Ref LambdaBatchSize
+      Enabled: true
+
+  # -------------------------
+  # Lambda Log Groups
+  # -------------------------
+
+  MessageProcessorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${MessageProcessorFunction}"
+      RetentionInDays: 7
+
+Outputs:
+  MessageProcessingQueueUrl:
+    Description: URL of the primary message processing SQS queue.
+    Value: !Ref MessageProcessingQueue
+
+  MessageProcessingDeadLetterQueueUrl:
+    Description: URL of the message processing dead-letter SQS queue.
+    Value: !Ref MessageProcessingDeadLetterQueue
+
+  MessageProcessorFunctionArn:
+    Description: ARN of the message processor Lambda function.
+    Value: !GetAtt MessageProcessorFunction.Arn
