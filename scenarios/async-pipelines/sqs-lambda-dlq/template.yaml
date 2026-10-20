@@ -146,7 +146,7 @@ Resources:
   MessageProcessorFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${MessageProcessorFunction}"
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-message-processor-${DeploymentEnvironment}"
       RetentionInDays: 7
 
 Outputs:

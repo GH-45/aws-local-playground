@@ -182,7 +182,7 @@ Resources:
   CreateItemFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${CreateItemFunction}"
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-create-item-function-${DeploymentEnvironment}"
       RetentionInDays: 7
 
 Outputs:

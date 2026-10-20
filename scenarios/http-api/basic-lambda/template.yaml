@@ -136,7 +136,7 @@ Resources:
   HealthFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${HealthFunction}"
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-health-function-${DeploymentEnvironment}"
       RetentionInDays: 7
 
 Outputs:
